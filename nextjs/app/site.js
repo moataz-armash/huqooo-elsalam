@@ -1,20 +1,18 @@
 // Single source of truth for absolute URLs used in metadata, Open Graph,
 // sitemap and JSON-LD.
 //
-// Resolution order:
-//   1. NEXT_PUBLIC_SITE_URL   - set this once a real custom domain is attached.
-//   2. VERCEL_PROJECT_PRODUCTION_URL - injected by Vercel at build time, so
-//      deployments are correct with no configuration at all.
-//   3. localhost              - local development.
-const vercelUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-  : null;
+// `www` is deliberate: it is the host that actually serves a 200. The apex
+// (hqolalsalam.com) issues a 308 redirect to it, and pointing canonical or
+// sitemap entries at a redirect makes Search Console report
+// "Page with redirect". If the redirect direction is ever flipped in Vercel,
+// change this value to match.
+const PRODUCTION_URL = "https://www.hqolalsalam.com";
 
-export const siteUrl = (
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  vercelUrl ||
-  "http://localhost:3000"
-).replace(/\/$/, "");
+// NEXT_PUBLIC_SITE_URL stays supported as an override for a future domain,
+// but nothing needs to be configured for the current one to be correct.
+// Note: it must be created with Vercel's "Config" type, never "Secret" --
+// a NEXT_PUBLIC_* value is inlined into the client bundle and is not secret.
+export const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || PRODUCTION_URL).replace(/\/$/, "");
 
 export const siteName = "حقول السلام";
 export const whatsappNumber = "966553383596";
