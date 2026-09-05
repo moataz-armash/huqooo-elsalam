@@ -21,3 +21,6 @@ nextjs/.next/
 nextjs/node_modules/
 nextjs/AGENTS.md
 nextjs/CLAUDE.md
+
+# Claude Code local config and worktrees
+.claude/
