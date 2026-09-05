@@ -228,3 +228,8 @@ main>section[id],#top,.site-footer[id]{scroll-margin-top:112px}
   .service-card{padding:26px;min-height:0}
   .steps{gap:14px}
 }
+
+/* Final CTA: the desktop `margin-inline-start` offset overrode .container's
+   centering on mobile, leaving the panel off-centre and 2px over its edge.
+   .hero-content already had this override; this one was missed. */
+@media(max-width:800px){.final-cta-inner{margin-inline-start:auto}}

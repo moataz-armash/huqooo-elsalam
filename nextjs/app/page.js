@@ -78,7 +78,7 @@ export default function Home() {
 
       <section className="section latest-blog" id="blog"><div className="container"><Heading eyebrow="من المدونة" title={<>معرفة تساعدك<br/><em>على النمو</em></>} text="نعمل على تجهيز محتوى يساعدك في العناية بنباتاتك وتخطيط مساحتك الخضراء."/><div className="blog-empty"><h3>مقالات جديدة قريباً</h3><p>سيظهر هنا أحدث محتوى المدونة بمجرد نشره.</p></div></div></section>
 
-      <section className="final-cta"><div className="container final-cta-inner reveal"><p className="eyebrow eyebrow-light">جاهزون لمساعدتك</p><h2>لنبدأ مشروعك<br/><em>الأخضر</em></h2><p>سواء كنت تحتاج إلى توريد شتلات، أو تنسيق حديقة، أو تنفيذ أعمال لاندسكيب، تواصل مع فريق حقول السلام وأرسل تفاصيل احتياجات مشروعك.</p><div className="final-actions"><a className="button button-gold" href={whatsapp()} target="_blank" rel="noopener noreferrer">اطلب عرض السعر عبر واتساب <span aria-hidden="true">↗</span></a><span className="phone">واتساب <strong dir="ltr">(+966553383596)</strong></span></div></div></section>
+      <section className="final-cta"><div className="container final-cta-inner reveal"><p className="eyebrow eyebrow-light">جاهزون لمساعدتك</p><h2>لنبدأ مشروعك<br/><em>الأخضر</em></h2><p>سواء كنت تحتاج إلى توريد شتلات، أو تنسيق حديقة، أو تنفيذ أعمال لاندسكيب، تواصل مع فريق حقول السلام وأرسل تفاصيل احتياجات مشروعك.</p><div className="final-actions"><a className="button button-gold" href={whatsapp()} target="_blank" rel="noopener noreferrer">اطلب عرض السعر عبر واتساب <span aria-hidden="true">↗</span></a><span className="phone">واتساب <strong dir="ltr">+966553383596</strong></span></div></div></section>
     </SiteShell>
   );
 }
