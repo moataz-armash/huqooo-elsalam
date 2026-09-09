@@ -19,3 +19,9 @@ export const whatsappNumber = "966553383596";
 export const phoneE164 = "+966553383596";
 export const mapsUrl = "https://maps.app.goo.gl/QAJ4nZD6hWkoBAJq5";
 export const geo = { latitude: 24.6158125, longitude: 46.7099375 };
+
+// Google Ads conversion tracking.
+// The site has no "thank you" page -- every conversion path is a WhatsApp
+// link -- so the event fires on WhatsApp click, not on a page view.
+export const googleAdsId = "AW-11537422364";
+export const googleAdsConversionSendTo = "AW-11537422364/zaSACNmAmfEcEJywvP0q";

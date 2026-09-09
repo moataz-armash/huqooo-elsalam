@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
+import { googleAdsConversionSendTo } from "@/app/site";
 
 const links = [["#top","الرئيسية"],["#about","من نحن"],["#services","خدماتنا"],["#projects","مشاريعنا"],["#blog","المدونة"],["#contact","تواصل معنا"]];
 
@@ -28,6 +29,20 @@ export default function SiteShell({children, whatsappUrl}) {
     // observer callbacks at all. Don't leave the page invisible there.
     const fallback=window.setTimeout(()=>{if(!observerFired) revealAll()},1200);
     return ()=>{window.removeEventListener("scroll",onScroll);window.clearTimeout(fallback);observer.disconnect()};
+  },[]);
+
+  // Google Ads conversion. There is no thank-you page to host the event
+  // snippet, so a WhatsApp click is the conversion. One delegated listener
+  // covers every wa.me link on the page, including those rendered by the
+  // server component, which cannot carry onClick handlers.
+  useEffect(()=>{
+    const onClick=event=>{
+      const link=event.target?.closest?.('a[href*="wa.me"]');
+      if(!link || typeof window.gtag!=="function") return;
+      window.gtag("event","conversion",{send_to:googleAdsConversionSendTo});
+    };
+    document.addEventListener("click",onClick);
+    return ()=>document.removeEventListener("click",onClick);
   },[]);
 
   useEffect(()=>{

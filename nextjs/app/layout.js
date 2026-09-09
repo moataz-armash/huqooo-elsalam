@@ -1,6 +1,7 @@
+import Script from "next/script";
 import { Tajawal, Manrope } from "next/font/google";
 import "./globals.css";
-import { siteUrl, siteName, phoneE164, mapsUrl, geo } from "./site";
+import { siteUrl, siteName, phoneE164, mapsUrl, geo, googleAdsId } from "./site";
 
 const tajawal = Tajawal({
   subsets: ["arabic", "latin"],
@@ -104,6 +105,13 @@ const websiteLd = {
   publisher: { "@id": `${siteUrl}/#business` },
 };
 
+// Only the real production deployment reports conversions. Local builds and
+// Vercel preview deployments must stay out of the Ads account -- a click while
+// testing would otherwise be counted as a genuine lead.
+// If this site ever moves off Vercel, VERCEL_ENV disappears and tracking stops:
+// swap this for whatever marks production on the new host.
+const analyticsEnabled = process.env.VERCEL_ENV === "production";
+
 export default function RootLayout({ children }) {
   return (
     <html lang="ar" dir="rtl" className={`${tajawal.variable} ${manrope.variable}`}>
@@ -120,6 +128,21 @@ export default function RootLayout({ children }) {
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify([organizationLd, websiteLd]) }}
         />
+        {analyticsEnabled && (
+          <>
+            <Script
+              id="gtag-src"
+              src={`https://www.googletagmanager.com/gtag/js?id=${googleAdsId}`}
+              strategy="afterInteractive"
+            />
+            <Script id="gtag-init" strategy="afterInteractive">
+              {`window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${googleAdsId}');`}
+            </Script>
+          </>
+        )}
       </body>
     </html>
   );
