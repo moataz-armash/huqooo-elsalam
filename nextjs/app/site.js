@@ -16,6 +16,8 @@ export const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || PRODUCTION_URL).repl
 
 export const siteName = "حقول السلام";
 export const whatsappNumber = "966553383596";
+export const whatsappLink = (message) =>
+  `https://wa.me/${whatsappNumber}${message ? `?text=${encodeURIComponent(message)}` : ""}`;
 export const phoneE164 = "+966553383596";
 export const mapsUrl = "https://maps.app.goo.gl/QAJ4nZD6hWkoBAJq5";
 export const geo = { latitude: 24.6158125, longitude: 46.7099375 };
