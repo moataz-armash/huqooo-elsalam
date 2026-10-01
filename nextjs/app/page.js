@@ -2,21 +2,14 @@ import Image from "next/image";
 import Link from "next/link";
 import SiteShell from "@/components/SiteShell";
 import { whatsappLink } from "./site";
+import { SERVICES } from "./services/services-data";
+import { getPosts } from "@/lib/strapi";
+import { formatDate } from "@/lib/format";
 import { BadgeDollarSign, Building2, FileText, FlaskConical, Flower2, House, Leaf, MessageCircle, Mountain, RefreshCw, Send, SlidersHorizontal, Sparkles, Search, Sprout, Wrench } from "lucide-react";
 
 const defaultMessage = "السلام عليكم، أرغب في الاستفسار عن خدمات ومنتجات حقول السلام وطلب عرض سعر.";
 const whatsapp = (message = defaultMessage) => whatsappLink(message);
-// Each service card opens the quote form with its service preselected.
-const quoteService = {sprout:"plants", flower:"landscape", mountain:"landscape", houseplant:"indoor", flask:"supplies", wrench:"supplies"};
 
-const services = [
-  ["01", "توريد الشتلات الزراعية", "نوفر خيارات متنوعة من الشتلات للمشاريع والفلل والحدائق والمزارع.", "sprout"],
-  ["02", "تنسيق الحدائق", "نساعدك على تصميم وتنفيذ مساحات خضراء جميلة ومنظمة.", "flower"],
-  ["03", "اللاندسكيب", "حلول متكاملة للمساحات الخارجية والمشاريع السكنية والتجارية.", "mountain"],
-  ["04", "النباتات الداخلية", "نباتات تضيف لمسة طبيعية وجمالية للمنازل والمكاتب والمنشآت.", "houseplant"],
-  ["05", "الأسمدة والمبيدات", "منتجات تساعد على العناية بالنباتات والحفاظ على نموها.", "flask"],
-  ["06", "الأدوات الزراعية", "مجموعة من الأدوات والمستلزمات اللازمة للعناية بالحدائق والنباتات.", "wrench"],
-];
 
 const reasons = [
   ["01", "قيمة أفضل مقابل السعر", "حلول وخيارات تناسب احتياجات وميزانية مشروعك.", "value"],
@@ -48,7 +41,8 @@ const projects = [
   ["/images/nursery-care-v2.webp", "نباتات داخلية", "طبيعة في كل زاوية"],
 ];
 
-export default function Home() {
+export default async function Home() {
+  const { posts: latestPosts } = await getPosts({ pageSize: 3 });
   const faqLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
@@ -65,7 +59,7 @@ export default function Home() {
       <div id="top" />
       <section className="hero"><div className="hero-media" /><div className="container hero-content reveal"><p className="eyebrow">حلول زراعية متكاملة للمشاريع والحدائق</p><h1>أفضل قيمة مقابل السعر في توريد الشتلات بالمملكة</h1><p className="hero-copy">نوفر مجموعة متنوعة من الشتلات والنباتات والخدمات الزراعية بأسعار تنافسية، مع حلول تناسب الفلل والحدائق والمزارع والمشاريع السكنية والتجارية.</p><div className="hero-actions"><Link className="button button-gold" href="/quote">اطلب عرض السعر <span aria-hidden="true">←</span></Link><a className="text-link" href="#services">تعرّف على خدماتنا <span aria-hidden="true">←</span></a></div><p className="trust-line"><span aria-hidden="true">✦</span> أرسل متطلبات مشروعك، وسنساعدك في اختيار الحل المناسب.</p></div><div className="hero-scroll">مرر للاستكشاف <span aria-hidden="true">↓</span></div></section>
 
-      <section className="section services" id="services"><div className="container"><Heading eyebrow="ما نقدمه لك" title={<>كل ما يحتاجه مشروعك<br/><em>الزراعي في مكان واحد</em></>} text="نوفر مجموعة متكاملة من المنتجات والخدمات الزراعية لتلبية احتياجات الأفراد والمشاريع بمختلف أحجامها."/><div className="services-grid">{services.map(([number,title,text,icon])=><article className="service-card reveal" key={number}><div className="card-top"><span className="service-number">{number}</span><span className="service-icon" aria-hidden="true"><LineIcon path={icon}/></span></div><h3>{title}</h3><p>{text}</p><Link href={`/quote?service=${quoteService[icon]}`}>اطلب عرض سعر <span aria-hidden="true">←</span></Link></article>)}</div><div className="section-cta"><a className="button button-outline" href={whatsapp()} target="_blank" rel="noopener noreferrer">تحدث مع مستشار زراعي <span aria-hidden="true">↗</span></a></div></div></section>
+      <section className="section services" id="services"><div className="container"><Heading eyebrow="ما نقدمه لك" title={<>كل ما يحتاجه مشروعك<br/><em>الزراعي في مكان واحد</em></>} text="نوفر مجموعة متكاملة من المنتجات والخدمات الزراعية لتلبية احتياجات الأفراد والمشاريع بمختلف أحجامها."/><div className="services-grid">{SERVICES.map((service,index)=><article className="service-card reveal" key={service.slug}><div className="card-top"><span className="service-number">{String(index+1).padStart(2,"0")}</span><span className="service-icon" aria-hidden="true"><LineIcon path={service.icon}/></span></div><h3>{service.title}</h3><p>{service.summary}</p><Link href={`/services/${service.slug}`}>تفاصيل الخدمة <span aria-hidden="true">←</span></Link></article>)}</div><div className="section-cta"><Link className="button button-outline" href="/services">كل الخدمات بالتفصيل <span aria-hidden="true">←</span></Link> <a className="button button-outline" href={whatsapp()} target="_blank" rel="noopener noreferrer">تحدث مع مستشار زراعي <span aria-hidden="true">↗</span></a></div></div></section>
 
       <section className="value-section" id="about"><div className="container value-grid"><div className="value-art reveal"><div className="image-frame"/><span className="stamp">من<br/>الأرض<br/>نبدأ</span></div><div className="value-copy reveal"><p className="eyebrow eyebrow-light">حلول مدروسة لمختلف الاحتياجات</p><h2>قيمة أفضل<br/><em>لمشروعك</em></h2><p>نحرص في حقول السلام على تقديم حلول زراعية تحقق أفضل قيمة ممكنة، من خلال توفير المنتجات والخدمات المناسبة بأسعار تنافسية تتوافق مع احتياجات المشروع.</p><Link className="button button-gold" href="/quote">احصل على عرض سعر مخصص <span aria-hidden="true">←</span></Link></div></div></section>
 
@@ -79,7 +73,7 @@ export default function Home() {
 
       <section className="section location-section" id="location"><div className="container"><Heading eyebrow="موقعنا" title={<>زورونا في <em>حقول السلام</em></>} text="تصفح موقعنا على الخريطة، واستخدم أزرار التكبير والتصغير للوصول إلينا بسهولة."/><div className="location-map"><iframe src="https://www.google.com/maps?q=24.6158125,46.7099375&z=16&output=embed" title="موقع شركة حقول السلام على الخريطة" loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen/></div><div className="location-actions"><a className="button button-outline" href="https://maps.app.goo.gl/QAJ4nZD6hWkoBAJq5" target="_blank" rel="noopener noreferrer">فتح الموقع في خرائط Google <span aria-hidden="true">↗</span></a></div></div></section>
 
-      <section className="section latest-blog" id="blog"><div className="container"><Heading eyebrow="من المدونة" title={<>معرفة تساعدك<br/><em>على النمو</em></>} text="نعمل على تجهيز محتوى يساعدك في العناية بنباتاتك وتخطيط مساحتك الخضراء."/><div className="blog-empty"><h3>مقالات جديدة قريباً</h3><p>سيظهر هنا أحدث محتوى المدونة بمجرد نشره.</p></div></div></section>
+      <section className="section latest-blog" id="blog"><div className="container"><Heading compact eyebrow="من المدونة" title={<>معرفة تساعدك<br/><em>على النمو</em></>} action={<Link className="text-link" href="/blog">كل المقالات <span aria-hidden="true">←</span></Link>}/>{latestPosts.length > 0 ? <div className="blog-grid">{latestPosts.map(post=><article className="blog-card reveal" key={post.slug}><Link className="blog-card-media" href={`/blog/${post.slug}`} aria-label={post.title}>{post.image ? <Image src={post.image.url} alt={post.image.alt || post.title} fill sizes="(max-width: 600px) 100vw, 33vw"/> : null}{post.category ? <span>{post.category}</span> : null}</Link><div className="blog-card-body"><p className="blog-card-meta">{formatDate(post.publishedDate)}</p><h3><Link href={`/blog/${post.slug}`}>{post.title}</Link></h3><p>{post.description}</p><Link className="blog-card-link" href={`/blog/${post.slug}`}>اقرأ المقال <span aria-hidden="true">←</span></Link></div></article>)}</div> : <div className="blog-empty"><h3>مقالات جديدة قريباً</h3><p>سيظهر هنا أحدث محتوى المدونة بمجرد نشره.</p></div>}</div></section>
 
       <section className="final-cta"><div className="container final-cta-inner reveal"><p className="eyebrow eyebrow-light">جاهزون لمساعدتك</p><h2>لنبدأ مشروعك<br/><em>الأخضر</em></h2><p>سواء كنت تحتاج إلى توريد شتلات، أو تنسيق حديقة، أو تنفيذ أعمال لاندسكيب، تواصل مع فريق حقول السلام وأرسل تفاصيل احتياجات مشروعك.</p><div className="final-actions"><Link className="button button-gold" href="/quote">اطلب عرض السعر <span aria-hidden="true">←</span></Link><span className="phone">واتساب <strong dir="ltr">+966553383596</strong></span></div></div></section>
     </SiteShell>

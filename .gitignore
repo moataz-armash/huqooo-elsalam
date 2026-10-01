@@ -24,3 +24,6 @@ nextjs/CLAUDE.md
 
 # Claude Code local config and worktrees
 .claude/
+
+# Local env files
+nextjs/.env*.local
