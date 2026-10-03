@@ -74,7 +74,45 @@ endpoints returned 404 until they were added.
   `blog-post`. Read permissions are separate from this token. Note that
   changing `API_TOKEN_SALT` in `.env` invalidates every existing token.
 
-## 3. Point the site at it
+## 3. Backups
+
+PostgreSQL 16 on this box is shared with three other apps (`divadent_strapi`,
+`cms_reviewup`, `flowra`). This app has its own database and role, both named
+`huqool_cms`, owner of that database only, reachable on 127.0.0.1 only. The
+password is in `.env` and in the backup archive — nowhere else.
+
+| | |
+|---|---|
+| Script | `/opt/huqool-backup.sh` |
+| Schedule | daily 03:45, `/etc/cron.d/huqool-backup` |
+| Destination | `/opt/huqool-backups`, mode 700, files 600 |
+| Retention | 14 days, pruned by age |
+| Log | `/var/log/huqool-backup.log` |
+
+Each run writes `db-<date>.sql.gz` (a `pg_dump`) and `files-<date>.tar.gz`
+containing the three things that exist nowhere else and are not in git:
+
+- `strapi/public/uploads/` — every article image
+- `strapi/.env` — including the database password and the six secrets
+- `nextjs/.env.production` — holds `STRAPI_URL`, whose absence silently breaks
+  every blog image (see section 4)
+
+Two known limits:
+
+- **The dumps sit on the same disk as the data.** A disk failure loses both.
+  Copying `/opt/huqool-backups` somewhere off the box is still to do.
+- **A backup is not proven until it has been restored.** Restore a dump into a
+  throwaway database and count the rows; do not assume a dump that exists is a
+  dump that works.
+
+### Rolling back to SQLite
+
+Left in place deliberately: `strapi/.tmp/data.db`, `strapi/.env.sqlite-backup`
+and `/var/www/huqool-cms.old`. Swapping the `.env` back and restarting reverts
+it. Note this loses anything written since the switch, so it is only an
+escape hatch for the days right after it, not a long-term option.
+
+## 4. Point the site at it
 
 The site is self-hosted, so this is a file on the server, not a Vercel setting.
 Create `/var/www/huqool/nextjs/.env.production` containing:
@@ -89,7 +127,7 @@ It is needed at build time as well as runtime: it configures the allowed image
 host and is read when the blog pages are pre-rendered. After that, new posts
 appear within about a minute without a rebuild.
 
-## 4. Check it before blaming the website
+## 5. Check it before blaming the website
 
 ```bash
 node strapi/probe.mjs --server strapi --api https://your-strapi-host --locales ar
@@ -115,7 +153,7 @@ Without `-g`, curl reads the `[ ]` in `pagination[pageSize]` as a glob, refuses
 the URL and prints nothing at all — which reads exactly like the server being
 down. This bit both the CI workflow and the server's update script.
 
-## 5. Writing posts from Zapier
+## 6. Writing posts from Zapier
 
 Create the post with `POST https://your-strapi-host/api/blog-posts`, header
 `Authorization: Bearer <API token>`, body:
@@ -161,7 +199,7 @@ but filling them is what makes the post compete in search results.
 
 Set `seoNoIndex` to keep a post out of Google while still publishing it.
 
-## 6. Running it locally on Windows
+## 7. Running it locally on Windows
 
 The admin build uses `@swc/core`, which refuses to unpack its native binary into
 a cache folder when any ancestor's DACL grants full control to a broad SID. The
@@ -185,7 +223,7 @@ then add `SWC_NATIVE_BINDING_CACHE=C:\swc-cache` to `strapi/.env`. Strapi loads
 `.env` before the admin build starts, so no shell variable is needed. The file
 is gitignored, so this never reaches the Linux server, which is unaffected.
 
-## 7. Why there is no database to copy
+## 8. Why there is no database to copy
 
 Public read permissions, the `ar` locale and the four blog categories are
 created by `src/index.js` on every boot, so they travel with a `git pull`
