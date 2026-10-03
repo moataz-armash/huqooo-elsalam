@@ -227,7 +227,18 @@ way and the post never appears on the site:
 Also note:
 
 - **`slug` must be unique and is best kept in Latin letters.** It becomes the
-  URL: `/blog/<slug>`. Arabic works but produces long encoded URLs when shared.
+  URL: `/blog/<slug>`. Arabic works, but it produces long encoded URLs when
+  shared, and it cost a long debugging session once: the first Arabic slug
+  returned 404 on the post page while the blog index, the homepage and the
+  sitemap all rendered that same post correctly. None of those three pass a
+  value through the URL path; the post page does. A percent-encoded route param
+  encoded a second time becomes `%25D8%25A7...`, which matches no slug in
+  Strapi. `getPost` now retries with the decoded form, so Arabic slugs work -
+  but Latin slugs avoid the whole class of problem and are better to share.
+
+  If a post ever 404s again while the index still lists it, that asymmetry is
+  the clue: the index and sitemap never touch a route param, so the fault is in
+  the slug round-trip, not in Strapi or the data.
 - **`featuredImage` is required by the schema.** Either upload an image through
   the admin, relax that field, or have Zapier upload to `/api/upload` first and
   send the returned id.
