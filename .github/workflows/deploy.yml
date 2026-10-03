@@ -1,0 +1,72 @@
+name: Deploy to server
+
+# Builds on the VPS over SSH, the same way the other sites on that box deploy.
+# The server owns the build details (Node 22 lives at /opt/node22 there, while
+# the system Node stays v20 for the other apps), so this workflow only calls
+# the update script rather than duplicating that knowledge here.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "nextjs/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+# Never let two deploys build in the same directory at once.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and restart on the server
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Run the update script over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script_stop: true
+          command_timeout: 20m
+          script: /var/www/huqool/update.sh
+
+  verify:
+    name: Check the live site
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # A deploy that leaves the site broken should fail the run, not go quiet.
+      - name: Every page returns 200
+        run: |
+          set -e
+          for path in / /services /services/garden-design /blog /quote /sitemap.xml /robots.txt; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "https://www.hqolalsalam.com$path")
+            printf '%-32s %s\n' "$path" "$code"
+            [ "$code" = "200" ] || { echo "::error::$path returned $code"; exit 1; }
+          done
+
+      - name: Apex redirects to the canonical host
+        run: |
+          set -e
+          location=$(curl -s -o /dev/null -w '%{redirect_url}' --max-time 30 https://hqolalsalam.com/)
+          echo "apex -> $location"
+          case "$location" in
+            https://www.hqolalsalam.com/*) ;;
+            *) echo "::error::apex no longer redirects to www"; exit 1 ;;
+          esac
+
+      - name: Canonical and the Google Ads tag are present
+        run: |
+          set -e
+          html=$(curl -s --max-time 30 https://www.hqolalsalam.com/)
+          echo "$html" | grep -q 'rel="canonical" href="https://www.hqolalsalam.com' \
+            || { echo "::error::canonical tag missing or wrong"; exit 1; }
+          echo "$html" | grep -q 'AW-11537422364' \
+            || { echo "::error::Google Ads conversion tag missing"; exit 1; }
+          echo "canonical ok, ads tag ok"

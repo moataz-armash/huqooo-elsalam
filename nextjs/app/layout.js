@@ -105,12 +105,15 @@ const websiteLd = {
   publisher: { "@id": `${siteUrl}/#business` },
 };
 
-// Only the real production deployment reports conversions. Local builds and
-// Vercel preview deployments must stay out of the Ads account -- a click while
-// testing would otherwise be counted as a genuine lead.
-// If this site ever moves off Vercel, VERCEL_ENV disappears and tracking stops:
-// swap this for whatever marks production on the new host.
-const analyticsEnabled = process.env.VERCEL_ENV === "production";
+// Conversions are reported from any production build, which is what the
+// server runs via `next start`. Host-agnostic on purpose: keying this to
+// VERCEL_ENV silently disabled tracking the moment the site moved off Vercel.
+// Vercel previews and local `next dev` stay out of the Ads account; export
+// ANALYTICS_DISABLED=1 to silence a production build you are testing locally.
+const analyticsEnabled =
+  process.env.NODE_ENV === "production" &&
+  process.env.VERCEL_ENV !== "preview" &&
+  process.env.ANALYTICS_DISABLED !== "1";
 
 export default function RootLayout({ children }) {
   return (
