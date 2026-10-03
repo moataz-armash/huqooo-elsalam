@@ -1,0 +1,21 @@
+############################
+# Strapi
+############################
+.env
+.env.*
+!.env.example
+node_modules/
+build/
+dist/
+.cache/
+.tmp/
+.strapi/
+.strapi-updater.json
+exports/
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploaded media lives on the server, not in git
+public/uploads/*
+!public/uploads/.gitkeep
