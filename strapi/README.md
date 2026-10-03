@@ -18,10 +18,39 @@ on the server to pull, `npm ci`, build and restart pm2.
 | Public URL | `https://api.hqolalsalam.com` (nginx → `127.0.0.1:1340`) |
 | pm2 process | `huqool-cms`, interpreter `/opt/node22/bin/node` |
 | Node | 22, at `/opt/node22`. The system node is v20 and must stay v20 |
-| Database | SQLite, `DATABASE_FILENAME` in `.env`, gitignored |
+| Database | PostgreSQL, `DATABASE_*` in `.env`. See below |
 
 `.env` and `public/uploads` live only on the server. They are gitignored, so a
 deploy never touches them — but it also means nothing backs them up.
+
+### Why PostgreSQL and not SQLite
+
+It started on SQLite only because that is `create-strapi-app`'s default, not
+because anything about this workload called for it. At this traffic SQLite
+would most likely have held up fine, but two things made it the wrong long-term
+home for content:
+
+- **The file sat at `.tmp/data.db`.** That is Strapi's default, and it is a
+  directory whose name invites deletion — by a cleanup script, by a `rm -rf
+  .tmp` during debugging, or by someone assuming it is scratch space. The whole
+  blog lived in a file named "temporary".
+- **There was no backup story.** Copying a live SQLite file while Strapi is
+  writing can produce a corrupt copy, so "just back up the file" is not
+  actually safe without using the backup API. `pg_dump` on a timer is routine.
+
+Smaller reasons: SQLite locks the whole database on write, so a Zapier POST or
+a media upload can collide with an ISR revalidation and surface `SQLITE_BUSY`;
+and it rules out ever running Strapi in pm2 cluster mode.
+
+Both drivers are installed, so the client is purely an `.env` choice. Nothing
+in this repo writes raw SQL — `src/index.js` goes through the documents and
+query APIs — so the two are interchangeable. Local development may stay on
+SQLite for convenience; set `DATABASE_CLIENT=sqlite` and `DATABASE_FILENAME`.
+
+Switching is cheap only while the database is empty: the locale, permissions
+and categories are recreated by `src/index.js` on boot, so an empty instance
+rebuilds itself and there is nothing to migrate. Once articles exist it becomes
+a real data migration, with a `pg_dump`/restore and downtime.
 
 ## 2. What configures itself, and what does not
 
