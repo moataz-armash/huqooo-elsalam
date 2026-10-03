@@ -27,3 +27,5 @@ nextjs/CLAUDE.md
 
 # Local env files
 nextjs/.env*.local
+# Lives on the server only, holds STRAPI_URL
+nextjs/.env.production
