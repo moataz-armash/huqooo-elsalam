@@ -4,8 +4,9 @@ The site reads blog posts from Strapi. Everything else on the site is static
 and does not depend on it — if Strapi is down, unset or empty, the blog shows
 its "مقالات جديدة قريباً" state and nothing else breaks.
 
-This folder holds the **content type schemas only**, not a Strapi app. They are
-the same four types used on diva_dent, copied unchanged.
+This folder holds the **content types only**, not a Strapi app. The schemas are
+the same four types used on diva_dent, copied unchanged, plus the router,
+controller and service for each.
 
 ## 1. Create the Strapi project
 
@@ -15,12 +16,17 @@ Anywhere you can host Node (a VPS, or Strapi Cloud):
 npx create-strapi-app@latest huqool-cms --quickstart
 ```
 
-Then copy these schemas in and restart. Strapi generates the controllers,
-routes and services for them on the next start:
+Then copy these in and restart:
 
 ```bash
 cp -r strapi/src/api/* huqool-cms/src/api/
 ```
+
+**Copy the whole `api` folder, not just the schemas.** Strapi 5 does not
+generate the router, controller and service from `schema.json` on its own —
+verified on this project, where all four endpoints returned 404 until they were
+added. They are included here, one small file each, identical to what the admin
+panel generates.
 
 ## 2. Settings that make or break it
 
@@ -35,16 +41,25 @@ Without this every request returns 403 and the blog looks empty.
 permission on `blog-post`. This is what Zapier uses. Read permissions are
 separate from this token.
 
+**Port and public URL** — this server already runs another Strapi on 1337
+(api.divadentclinics.com), so this one uses **1340**. In the Strapi `.env` set
+`PORT=1340` and `URL=https://api.hqolalsalam.com`, and make `config/server`
+read it (`url: env('URL', 'http://localhost:1340')`); without it the admin
+panel redirects incorrectly from behind nginx.
+
 ## 3. Point the site at it
 
 In Vercel → Settings → Environment Variables, add:
 
 | Name | Value |
 |---|---|
-| `STRAPI_URL` | `https://your-strapi-host` (no trailing slash) |
+| `STRAPI_URL` | `https://api.hqolalsalam.com` (no trailing slash) |
 
-Type **Config**, not Secret. Then redeploy. New posts appear within about a
-minute without a rebuild.
+The site is self-hosted, so this lives in `nextjs/.env.production` **on the
+server** (gitignored, created by hand) and then `/var/www/huqool/update.sh`.
+It is needed at build time as well as runtime: it configures the allowed image
+host and is read when the blog pages are pre-rendered. After that, new posts
+appear within about a minute without a rebuild.
 
 ## 4. Check it before blaming the website
 
