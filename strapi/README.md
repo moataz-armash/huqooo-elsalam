@@ -123,3 +123,36 @@ post's title and description when they are empty, so posts are never broken —
 but filling them is what makes the post compete in search results.
 
 Set `seoNoIndex` to keep a post out of Google while still publishing it.
+
+## 6. Running it locally on Windows
+
+The admin build uses `@swc/core`, which refuses to unpack its native binary into
+a cache folder when any ancestor's DACL grants full control to a broad SID. The
+AppContainer ACE on `%LOCALAPPDATA%` is inherited across the whole user profile,
+so every default location is rejected and the only visible error is the useless
+`Failed to load native binding`. The real message appears with:
+
+```bash
+node -e "process.dlopen({exports:{}},require.resolve('@swc/core-win32-x64-msvc/swc.win32-x64-msvc.node'))"
+```
+
+Fix it by pointing the cache at a folder with inheritance switched off:
+
+```powershell
+New-Item -ItemType Directory C:\swc-cache
+icacls C:\swc-cache /inheritance:r
+icacls C:\swc-cache /grant:r "$($env:USERNAME):(OI)(CI)F" "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F"
+```
+
+then add `SWC_NATIVE_BINDING_CACHE=C:\swc-cache` to `strapi/.env`. Strapi loads
+`.env` before the admin build starts, so no shell variable is needed. The file
+is gitignored, so this never reaches the Linux server, which is unaffected.
+
+## 7. Why there is no database to copy
+
+Public read permissions, the `ar` locale and the four blog categories are
+created by `src/index.js` on every boot, so they travel with a `git pull`
+instead of living only in a database. Posts come from Zapier. Nothing in the
+local SQLite file needs to reach the server — copying a database over a running
+one is a one-time move that silently destroys content the second time it is
+done.

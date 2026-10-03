@@ -1,0 +1,65 @@
+name: Deploy the CMS
+
+# Strapi deploys separately from the site: it is a long-running process with its
+# own database and uploads, so a CMS change must not rebuild the site and a site
+# change must not restart the CMS. The server owns the build details, the same
+# way it does for the site, so this workflow only calls the update script.
+#
+# The script is NOT interchangeable with the site's: it keeps the Strapi .env,
+# the SQLite file and public/uploads, none of which are in git.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "strapi/**"
+      - ".github/workflows/deploy-cms.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cms
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and restart Strapi on the server
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Run the CMS update script over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script_stop: true
+          command_timeout: 20m
+          script: /var/www/huqool/update-cms.sh
+
+  verify:
+    name: Check the API still answers
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # A 403 here means the bootstrap did not grant public read, and the blog
+      # would silently fall back to its empty state with no other signal.
+      - name: Public read is granted on every type
+        run: |
+          set -e
+          for type in blog-posts authors blog-categories blog-tags; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+              "https://api.hqolalsalam.com/api/$type?locale=ar&pagination[pageSize]=1")
+            printf '%-18s %s\n' "$type" "$code"
+            [ "$code" = "200" ] || { echo "::error::$type returned $code (403 = permissions, 404 = type missing)"; exit 1; }
+          done
+
+      - name: The seeded categories are present
+        run: |
+          set -e
+          body=$(curl -s --max-time 30 "https://api.hqolalsalam.com/api/blog-categories?locale=ar&pagination[pageSize]=50")
+          for slug in plants landscape indoor plant-care; do
+            echo "$body" | grep -q "\"$slug\"" || { echo "::error::category $slug missing — bootstrap did not run"; exit 1; }
+          done
+          echo "all four categories present"
