@@ -106,14 +106,34 @@ export async function getPosts({ page = 1, pageSize = 12 } = {}) {
   return { posts, pageCount: meta.pageCount || 0, total: meta.total || posts.length };
 }
 
+// A slug lookup has to survive the route param arriving either decoded
+// ("افضل-اشجار") or still percent-encoded ("%D8%A7%D9%81..."), which varies for
+// non-ASCII segments. Encoding an already-encoded slug yields %25D8%25A7..., a
+// value Strapi matches nothing against, and the post 404s while the blog index
+// and the sitemap - which never touch a route param - keep working.
+function slugVariants(slug) {
+  const variants = [slug];
+  try {
+    const decoded = decodeURIComponent(slug);
+    if (decoded !== slug) variants.push(decoded);
+  } catch {
+    // A slug containing a stray % is not valid encoding; the raw form is all
+    // there is to try.
+  }
+  return variants;
+}
+
 export async function getPost(slug) {
-  const json = await strapiGet("blog-posts", {
-    "filters[slug][$eq]": slug,
-    "pagination[pageSize]": "1",
-    ...POPULATE,
-  });
-  const entry = (json?.data || [])[0];
-  return entry ? normalizePost(entry) : null;
+  for (const candidate of slugVariants(slug)) {
+    const json = await strapiGet("blog-posts", {
+      "filters[slug][$eq]": candidate,
+      "pagination[pageSize]": "1",
+      ...POPULATE,
+    });
+    const entry = (json?.data || [])[0];
+    if (entry) return normalizePost(entry);
+  }
+  return null;
 }
 
 // Used by generateStaticParams and the sitemap. Returns [] when Strapi is
