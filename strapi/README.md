@@ -49,14 +49,15 @@ panel redirects incorrectly from behind nginx.
 
 ## 3. Point the site at it
 
-In Vercel → Settings → Environment Variables, add:
+The site is self-hosted, so this is a file on the server, not a Vercel setting.
+Create `/var/www/huqool/nextjs/.env.production` containing:
 
-| Name | Value |
-|---|---|
-| `STRAPI_URL` | `https://api.hqolalsalam.com` (no trailing slash) |
+```
+STRAPI_URL=https://api.hqolalsalam.com
+```
 
-The site is self-hosted, so this lives in `nextjs/.env.production` **on the
-server** (gitignored, created by hand) and then `/var/www/huqool/update.sh`.
+No trailing slash. It is gitignored, so `git pull` will not remove it. Then
+rebuild with `/var/www/huqool/update.sh`.
 It is needed at build time as well as runtime: it configures the allowed image
 host and is read when the blog pages are pre-rendered. After that, new posts
 appear within about a minute without a rebuild.
