@@ -97,13 +97,41 @@ containing the three things that exist nowhere else and are not in git:
 - `nextjs/.env.production` — holds `STRAPI_URL`, whose absence silently breaks
   every blog image (see section 4)
 
-Two known limits:
+`CONNECT` on this database is revoked from `PUBLIC` and granted only to
+`huqool_cms`, so the other apps' roles cannot open a connection to it. The
+reverse is not true and deliberately so — see the note at the end of this
+section.
 
-- **The dumps sit on the same disk as the data.** A disk failure loses both.
-  Copying `/opt/huqool-backups` somewhere off the box is still to do.
-- **A backup is not proven until it has been restored.** Restore a dump into a
-  throwaway database and count the rows; do not assume a dump that exists is a
-  dump that works.
+### Restoring, and the one step that will bite you
+
+The dump has been restored into a throwaway database and verified: 49 tables,
+the four categories present, ownership intact, zero manual steps needed.
+
+**On a rebuilt box, create the role before restoring.** The dump contains
+`OWNER TO huqool_cms` statements, so without the role every ownership line
+errors out:
+
+```sql
+CREATE ROLE huqool_cms LOGIN PASSWORD '<from the backup archive>';
+CREATE DATABASE huqool_cms OWNER huqool_cms;
+```
+
+The password is inside `files-<date>.tar.gz` at `strapi/.env`, which is why
+that archive matters as much as the SQL dump. Restoring the database without it
+gives you the content but not a working app.
+
+### Still outstanding
+
+**The dumps sit on the same disk as the data.** A disk or provider failure
+loses the site, the database and every backup together. The plan is Backblaze
+B2 via `rclone` — free at this size, and a different company from both the VPS
+host and the Google account, so no single compromise takes everything.
+
+**Retention should be tiered.** 14 days of dailies only protects against
+accidents you notice quickly. It does not protect against corruption spotted
+two months later, and articles are not regenerable. At ~34 KB a dump, keeping
+daily for 14 days, weekly for 8 weeks and monthly forever costs well under a
+megabyte a year.
 
 ### Rolling back to SQLite
 
@@ -111,6 +139,22 @@ Left in place deliberately: `strapi/.tmp/data.db`, `strapi/.env.sqlite-backup`
 and `/var/www/huqool-cms.old`. Swapping the `.env` back and restarting reverts
 it. Note this loses anything written since the switch, so it is only an
 escape hatch for the days right after it, not a long-term option.
+
+### Why the other databases were left alone
+
+Every role on this box can still open a connection to the other three
+databases, read no data, and see table and role names via the system catalogs.
+That is Postgres's default `CONNECT` grant to `PUBLIC` and it predates this
+app. It was left in place on purpose: all four databases belong to the same
+owner, so there is no third party for metadata to leak to, and `cms_reviewup`
+is owned by `postgres` while the app connects as `reviewup_user` — a bare
+revoke there would break a live site for no real gain.
+
+**Revisit this if the box ever hosts a project belonging to someone else.**
+Then the calculation changes completely, and the fix is a revoke from `PUBLIC`
+plus an explicit grant per connecting role — identified from a day or two of
+`log_connections`, not from a short sample of `pg_stat_activity`, which misses
+anything that connects on a schedule.
 
 ## 4. Point the site at it
 
