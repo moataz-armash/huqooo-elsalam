@@ -7,6 +7,14 @@ import { getPosts } from "@/lib/strapi";
 import { formatDate } from "@/lib/format";
 import { BadgeDollarSign, Building2, FileText, FlaskConical, Flower2, House, Leaf, MessageCircle, Mountain, RefreshCw, Send, SlidersHorizontal, Sparkles, Search, Sprout, Wrench } from "lucide-react";
 
+// Strapi reads degrade to an empty result instead of throwing, so a render that
+// happens while Strapi is unset or down still succeeds - it just produces an
+// empty blog, a sitemap with no posts, or a 404 for a post that exists. When
+// STRAPI_URL is missing, lib/strapi.js returns before making any fetch, so that
+// render registers no revalidation at all and Next caches it as fully static:
+// stale-while-revalidate was a year. This caps every such mistake at a minute.
+export const revalidate = 60;
+
 const defaultMessage = "السلام عليكم، أرغب في الاستفسار عن خدمات ومنتجات حقول السلام وطلب عرض سعر.";
 const whatsapp = (message = defaultMessage) => whatsappLink(message);
 
