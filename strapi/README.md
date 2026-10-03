@@ -4,48 +4,46 @@ The site reads blog posts from Strapi. Everything else on the site is static
 and does not depend on it — if Strapi is down, unset or empty, the blog shows
 its "مقالات جديدة قريباً" state and nothing else breaks.
 
-This folder holds the **content types only**, not a Strapi app. The schemas are
-the same four types used on diva_dent, copied unchanged, plus the router,
-controller and service for each.
+This folder is the **whole Strapi app**, not just the schemas. It is deployed
+from this repo like the site is: a push touching `strapi/**` runs
+`.github/workflows/deploy-cms.yml`, which calls `/var/www/huqool/update-cms.sh`
+on the server to pull, `npm ci`, build and restart pm2.
 
-## 1. Create the Strapi project
+## 1. Where it runs
 
-Anywhere you can host Node (a VPS, or Strapi Cloud):
+| | |
+|---|---|
+| Server path | `/var/www/huqool/strapi` |
+| Port | **1340** — 1337 is taken by api.divadentclinics.com |
+| Public URL | `https://api.hqolalsalam.com` (nginx → `127.0.0.1:1340`) |
+| pm2 process | `huqool-cms`, interpreter `/opt/node22/bin/node` |
+| Node | 22, at `/opt/node22`. The system node is v20 and must stay v20 |
+| Database | SQLite, `DATABASE_FILENAME` in `.env`, gitignored |
 
-```bash
-npx create-strapi-app@latest huqool-cms --quickstart
-```
+`.env` and `public/uploads` live only on the server. They are gitignored, so a
+deploy never touches them — but it also means nothing backs them up.
 
-Then copy these in and restart:
+## 2. What configures itself, and what does not
 
-```bash
-cp -r strapi/src/api/* huqool-cms/src/api/
-```
+**Automatic.** `src/index.js` runs on every boot and creates the `ar` locale,
+makes it the default, grants the Public role `find`/`findOne` on all four types,
+and seeds the four blog categories. It is additive and never edits an existing
+record, so it is safe against an instance holding real content. This is
+deliberate: these would otherwise live only in the database, so a fresh instance
+would return 403 on everything and the blog would show its fallback with no
+clue why. Look for two `[bootstrap]` lines in the boot log.
 
-**Copy the whole `api` folder, not just the schemas.** Strapi 5 does not
-generate the router, controller and service from `schema.json` on its own —
-verified on this project, where all four endpoints returned 404 until they were
-added. They are included here, one small file each, identical to what the admin
-panel generates.
+**The router, controller and service are committed for each type.** Strapi 5
+does not generate them from `schema.json` — verified here, where all four
+endpoints returned 404 until they were added.
 
-## 2. Settings that make or break it
+**Still manual, once.** Two things cannot be code:
 
-**Internationalization** — install the i18n plugin and add `ar` as the
-**default** locale. The site always requests `locale=ar`.
-
-**Public read permissions** — Settings → Roles → **Public** → tick `find` and
-`findOne` for `blog-post`, `author`, `blog-category`, `blog-tag`.
-Without this every request returns 403 and the blog looks empty.
-
-**API token for writing** — Settings → API Tokens → create one with `create`
-permission on `blog-post`. This is what Zapier uses. Read permissions are
-separate from this token.
-
-**Port and public URL** — this server already runs another Strapi on 1337
-(api.divadentclinics.com), so this one uses **1340**. In the Strapi `.env` set
-`PORT=1340` and `URL=https://api.hqolalsalam.com`, and make `config/server`
-read it (`url: env('URL', 'http://localhost:1340')`); without it the admin
-panel redirects incorrectly from behind nginx.
+- **The admin account.** First-run registration at
+  `https://api.hqolalsalam.com/admin`. Until it exists you cannot add articles.
+- **The API token for Zapier.** Settings → API Tokens → one with `create` on
+  `blog-post`. Read permissions are separate from this token. Note that
+  changing `API_TOKEN_SALT` in `.env` invalidates every existing token.
 
 ## 3. Point the site at it
 
@@ -75,8 +73,18 @@ the fallback. Only this tells them apart:
 |---|---|---|
 | `ok N` | Working | — |
 | `empty` | Public, but no entries | Add a post |
-| `forbidden` | find/findOne is off | Step 2 above |
-| `http 404` | Type not in the running Strapi | The schemas were never copied in, or Strapi wasn't restarted |
+| `forbidden` | find/findOne is off | The bootstrap didn't run - check the boot log for its two `[bootstrap]` lines |
+| `http 404` | Type not in the running Strapi | pm2 is running from the wrong directory, or Strapi wasn't restarted |
+
+If you check by hand with `curl`, **pass `-g`**:
+
+```bash
+curl -g -s -o /dev/null -w '%{http_code}' 'https://api.hqolalsalam.com/api/blog-posts?locale=ar&pagination[pageSize]=1'
+```
+
+Without `-g`, curl reads the `[ ]` in `pagination[pageSize]` as a glob, refuses
+the URL and prints nothing at all — which reads exactly like the server being
+down. This bit both the CI workflow and the server's update script.
 
 ## 5. Writing posts from Zapier
 

@@ -47,9 +47,12 @@ jobs:
       # would silently fall back to its empty state with no other signal.
       - name: Public read is granted on every type
         run: |
+          # curl needs -g: without it the [ ] in pagination[pageSize] are read as
+          # a glob, curl refuses the URL, and the code comes back empty -- which
+          # looks identical to a failed deploy. Do not drop the flag.
           set -e
           for type in blog-posts authors blog-categories blog-tags; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            code=$(curl -g -s -o /dev/null -w '%{http_code}' --max-time 30 \
               "https://api.hqolalsalam.com/api/$type?locale=ar&pagination[pageSize]=1")
             printf '%-18s %s\n' "$type" "$code"
             [ "$code" = "200" ] || { echo "::error::$type returned $code (403 = permissions, 404 = type missing)"; exit 1; }
@@ -57,8 +60,11 @@ jobs:
 
       - name: The seeded categories are present
         run: |
+          # curl needs -g: without it the [ ] in pagination[pageSize] are read as
+          # a glob, curl refuses the URL, and the code comes back empty -- which
+          # looks identical to a failed deploy. Do not drop the flag.
           set -e
-          body=$(curl -s --max-time 30 "https://api.hqolalsalam.com/api/blog-categories?locale=ar&pagination[pageSize]=50")
+          body=$(curl -g -s --max-time 30 "https://api.hqolalsalam.com/api/blog-categories?locale=ar&pagination[pageSize]=50")
           for slug in plants landscape indoor plant-care; do
             echo "$body" | grep -q "\"$slug\"" || { echo "::error::category $slug missing — bootstrap did not run"; exit 1; }
           done
