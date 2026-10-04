@@ -2,19 +2,26 @@
 //
 // Rules that are silent when broken, so they are enforced here once:
 //   - every read sends `locale`; omitting it returns the default locale
-//     regardless of the page language,
+//     regardless of the page language. It is a required argument rather than a
+//     defaulted one, so a forgotten locale is a crash in development and never
+//     a page quietly showing the wrong language,
 //   - `populate` is never comma-separated (that returns nothing, silently) —
 //     only the indexed form works,
 //   - a slug lookup must send `locale` alongside filters[slug][$eq], because
-//     slugs are localized.
+//     slugs are localized: the same article has a different slug in each
+//     language, and the Arabic slug does not exist in the English locale.
 //
 // Every fetch degrades to an empty result rather than throwing, so the blog
 // shows its "coming soon" state when Strapi is unset, down or still empty.
 const STRAPI_URL = (process.env.STRAPI_URL || "").replace(/\/$/, "");
-const LOCALE = "ar";
 const REVALIDATE = 60;
 
 export const strapiConfigured = Boolean(STRAPI_URL);
+
+function requireLocale(locale, fn) {
+  if (!locale) throw new Error(`[strapi] ${fn} called without a locale`);
+  return locale;
+}
 
 // Strapi v4 nests fields under `attributes`; v5 returns them flat. Accept both
 // so the site keeps working across a Strapi upgrade.
@@ -24,6 +31,12 @@ const flat = (node) => {
   const item = Array.isArray(entry) ? entry[0] : entry;
   if (!item) return null;
   return item.attributes ? { id: item.id, ...item.attributes } : item;
+};
+
+const list = (node) => {
+  const entries = node?.data !== undefined ? node.data : node;
+  if (!Array.isArray(entries)) return [];
+  return entries.map((item) => (item?.attributes ? { id: item.id, ...item.attributes } : item)).filter(Boolean);
 };
 
 const media = (node) => {
@@ -45,11 +58,15 @@ const POPULATE = {
   "populate[seoOgImage][fields][0]": "url",
   "populate[category][fields][0]": "name",
   "populate[author][fields][0]": "name",
+  // The same article in the other language. Needed for hreflang: the two
+  // versions have different slugs, so the counterpart URL cannot be guessed.
+  "populate[localizations][fields][0]": "slug",
+  "populate[localizations][fields][1]": "locale",
 };
 
 async function strapiGet(path, params) {
   if (!STRAPI_URL) return null;
-  const query = new URLSearchParams({ locale: LOCALE, ...params });
+  const query = new URLSearchParams(params);
   try {
     const res = await fetch(`${STRAPI_URL}/api/${path}?${query}`, {
       next: { revalidate: REVALIDATE },
@@ -72,6 +89,7 @@ function normalizePost(entry) {
   const image = media(post.featuredImage);
   return {
     slug: post.slug,
+    locale: post.locale || null,
     title: post.title || "",
     description: post.description || "",
     content: post.content || "",
@@ -81,6 +99,10 @@ function normalizePost(entry) {
     image,
     category: flat(post.category)?.name || null,
     author: flat(post.author)?.name || null,
+    // [{ locale, slug }] for the other languages this article exists in.
+    translations: list(post.localizations)
+      .map((item) => ({ locale: item.locale, slug: item.slug }))
+      .filter((item) => item.locale && item.slug),
     seo: {
       metaTitle: post.seoMetaTitle || null,
       metaDescription: post.seoMetaDescription || null,
@@ -94,8 +116,10 @@ function normalizePost(entry) {
   };
 }
 
-export async function getPosts({ page = 1, pageSize = 12 } = {}) {
+export async function getPosts(locale, { page = 1, pageSize = 12 } = {}) {
+  requireLocale(locale, "getPosts");
   const json = await strapiGet("blog-posts", {
+    locale,
     "sort[0]": "publishedDate:desc",
     "pagination[page]": String(page),
     "pagination[pageSize]": String(pageSize),
@@ -123,9 +147,11 @@ function slugVariants(slug) {
   return variants;
 }
 
-export async function getPost(slug) {
+export async function getPost(locale, slug) {
+  requireLocale(locale, "getPost");
   for (const candidate of slugVariants(slug)) {
     const json = await strapiGet("blog-posts", {
+      locale,
       "filters[slug][$eq]": candidate,
       "pagination[pageSize]": "1",
       ...POPULATE,
@@ -138,18 +164,34 @@ export async function getPost(slug) {
 
 // Used by generateStaticParams and the sitemap. Returns [] when Strapi is
 // unavailable so a build never fails because the CMS is down.
-export async function getPostIndex() {
+export async function getPostIndex(locale) {
+  requireLocale(locale, "getPostIndex");
   const json = await strapiGet("blog-posts", {
+    locale,
     "fields[0]": "slug",
     "fields[1]": "updatedAt",
     "fields[2]": "publishedDate",
     "sort[0]": "publishedDate:desc",
     "pagination[pageSize]": "200",
+    "populate[localizations][fields][0]": "slug",
+    "populate[localizations][fields][1]": "locale",
   });
   return (json?.data || [])
     .map((entry) => {
       const post = flat(entry);
-      return post?.slug ? { slug: post.slug, updatedAt: post.updatedAt || post.publishedDate || null } : null;
+      if (!post?.slug) return null;
+      return {
+        slug: post.slug,
+        updatedAt: post.updatedAt || post.publishedDate || null,
+        translations: list(post.localizations)
+          .map((item) => ({ locale: item.locale, slug: item.slug }))
+          .filter((item) => item.locale && item.slug),
+      };
     })
     .filter(Boolean);
 }
+
+// The counterpart slug in another language, or null when the article has not
+// been translated. Callers must handle null rather than guessing a URL.
+export const translationSlug = (post, locale) =>
+  post?.translations?.find((item) => item.locale === locale)?.slug || null;

@@ -19,14 +19,33 @@ const PUBLIC_READ = [
   "api::blog-tag.blog-tag",
 ];
 
+// One category per slug, described in both languages. The slug is shared so
+// the two are the same category, not two unrelated ones.
 const CATEGORIES = [
-  { slug: "plants", name: "شتلات ونباتات", description: "اختيار وزراعة الأشجار والنخيل والشجيرات والأزهار والعشب" },
-  { slug: "landscape", name: "تنسيق حدائق ولاندسكيب", description: "تصميم وتنفيذ المساحات الخارجية وشبكات الري والإضاءة" },
-  { slug: "indoor", name: "نباتات داخلية", description: "النباتات الداخلية للمنازل والمكاتب والمنشآت" },
-  { slug: "plant-care", name: "العناية بالنباتات", description: "الري والتسميد والآفات والصيانة الموسمية" },
+  {
+    slug: "plants",
+    ar: { name: "شتلات ونباتات", description: "اختيار وزراعة الأشجار والنخيل والشجيرات والأزهار والعشب" },
+    en: { name: "Seedlings and plants", description: "Choosing and planting trees, palms, shrubs, flowers and turf" },
+  },
+  {
+    slug: "landscape",
+    ar: { name: "تنسيق حدائق ولاندسكيب", description: "تصميم وتنفيذ المساحات الخارجية وشبكات الري والإضاءة" },
+    en: { name: "Garden design and landscaping", description: "Designing and building outdoor spaces, irrigation and lighting" },
+  },
+  {
+    slug: "indoor",
+    ar: { name: "نباتات داخلية", description: "النباتات الداخلية للمنازل والمكاتب والمنشآت" },
+    en: { name: "Indoor plants", description: "Indoor plants for homes, offices and institutions" },
+  },
+  {
+    slug: "plant-care",
+    ar: { name: "العناية بالنباتات", description: "الري والتسميد والآفات والصيانة الموسمية" },
+    en: { name: "Plant care", description: "Watering, feeding, pests and seasonal maintenance" },
+  },
 ];
 
 const LOCALE = "ar";
+const LOCALES = ["ar", "en"];
 
 // The site requests locale=ar on every read, so ar must exist and be the
 // default. Locales are database rows, not config, so a fresh instance starts
@@ -78,23 +97,48 @@ async function grantPublicRead(strapi) {
   strapi.log.info(`[bootstrap] public read permissions: ${added} added, ${PUBLIC_READ.length * 2 - added} already present`);
 }
 
+// Seeds each category in Arabic, then adds the English version of the same
+// document. Translating an existing document is an update against its
+// documentId with a different locale - creating a second document would give
+// the English site categories that are unrelated to the Arabic ones.
 async function seedCategories(strapi) {
-  let created = 0;
+  const api = strapi.documents("api::blog-category.blog-category");
+  const counts = { created: 0, translated: 0, present: 0 };
+
   for (const category of CATEGORIES) {
-    const existing = await strapi.documents("api::blog-category.blog-category").findFirst({
+    let doc = await api.findFirst({
       filters: { slug: category.slug },
       locale: LOCALE,
       status: "published",
     });
-    if (existing) continue;
-    await strapi.documents("api::blog-category.blog-category").create({
-      data: category,
-      locale: LOCALE,
-      status: "published",
-    });
-    created += 1;
+
+    if (!doc) {
+      doc = await api.create({
+        data: { slug: category.slug, ...category[LOCALE] },
+        locale: LOCALE,
+        status: "published",
+      });
+      counts.created += 1;
+    } else {
+      counts.present += 1;
+    }
+
+    for (const locale of LOCALES.filter((l) => l !== LOCALE)) {
+      const translated = await api.findOne({ documentId: doc.documentId, locale, status: "published" });
+      if (translated) continue;
+      await api.update({
+        documentId: doc.documentId,
+        locale,
+        data: { slug: category.slug, ...category[locale] },
+        status: "published",
+      });
+      counts.translated += 1;
+    }
   }
-  strapi.log.info(`[bootstrap] blog categories: ${created} created, ${CATEGORIES.length - created} already present`);
+
+  strapi.log.info(
+    `[bootstrap] blog categories: ${counts.created} created, ${counts.present} already present, ${counts.translated} translations added`,
+  );
 }
 
 module.exports = {

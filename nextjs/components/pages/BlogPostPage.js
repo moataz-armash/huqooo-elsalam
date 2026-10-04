@@ -3,32 +3,38 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { marked } from "marked";
 import SiteShell from "@/components/SiteShell";
-import { getPost, getPostIndex, getPosts } from "@/lib/strapi";
+import { getPost, getPosts, translationSlug } from "@/lib/strapi";
 import { formatDate } from "@/lib/format";
-import { siteName, siteUrl, whatsappLink } from "../../site";
+import { siteName, siteUrl, whatsappLink } from "@/app/site";
+import { config, languageAlternates, localePath, otherLocale } from "@/app/i18n";
+import { ui, ENQUIRY_WHATSAPP } from "@/app/content/ui";
 
-// Strapi reads degrade to an empty result instead of throwing, so a render that
-// happens while Strapi is unset or down still succeeds - it just produces an
-// empty blog, a sitemap with no posts, or a 404 for a post that exists. When
-// STRAPI_URL is missing, lib/strapi.js returns before making any fetch, so that
-// render registers no revalidation at all and Next caches it as fully static:
-// stale-while-revalidate was a year. This caps every such mistake at a minute.
-export const revalidate = 60;
-
-// Posts added after a deploy render on demand instead of 404ing, so an
-// automation can publish without triggering a rebuild.
-export const dynamicParams = true;
-
-export async function generateStaticParams() {
-  const index = await getPostIndex();
-  return index.map(({ slug }) => ({ slug }));
+// The two language versions of an article have different slugs, so the
+// counterpart URL cannot be derived from this one - it has to come from
+// Strapi's localizations. When an article has not been translated yet, no
+// alternate is emitted at all, which is correct: telling Google a translation
+// exists when it does not is worse than saying nothing.
+function alternatesFor(locale, post) {
+  const path = (loc, slug) => localePath(loc, `/blog/${slug}`);
+  const other = otherLocale(locale);
+  const otherSlug = translationSlug(post, other);
+  const self = path(locale, post.slug);
+  if (!otherSlug) return { canonical: post.seo.canonical || self };
+  return {
+    canonical: post.seo.canonical || self,
+    languages: languageAlternates({
+      ar: locale === "ar" ? self : path("ar", otherSlug),
+      en: locale === "en" ? self : path("en", otherSlug),
+    }),
+  };
 }
 
-export async function generateMetadata({ params }) {
-  const { slug } = await params;
-  const post = await getPost(slug);
+export async function blogPostMetadata(locale, slug) {
+  const post = await getPost(locale, slug);
   if (!post) return {};
-  const url = `/blog/${post.slug}`;
+  const { ogLocale } = config(locale);
+  const brand = ui(locale).brandName;
+  const url = localePath(locale, `/blog/${post.slug}`);
   const title = post.seo.metaTitle || post.title;
   const description = post.seo.metaDescription || post.description;
   const image = post.seo.ogImage;
@@ -36,13 +42,13 @@ export async function generateMetadata({ params }) {
     title,
     description,
     keywords: post.seo.keywords ? post.seo.keywords.split(",").map((k) => k.trim()) : undefined,
-    alternates: { canonical: post.seo.canonical || url },
+    alternates: alternatesFor(locale, post),
     robots: post.seo.noIndex ? { index: false, follow: true } : undefined,
     openGraph: {
       type: "article",
-      locale: "ar_SA",
+      locale: ogLocale,
       url,
-      siteName,
+      siteName: brand,
       title: post.seo.ogTitle || title,
       description: post.seo.ogDescription || description,
       publishedTime: post.publishedDate || undefined,
@@ -57,17 +63,26 @@ export async function generateMetadata({ params }) {
   };
 }
 
-export default async function BlogPostPage({ params }) {
-  const { slug } = await params;
-  const post = await getPost(slug);
+export default async function BlogPostPage({ locale, slug }) {
+  const post = await getPost(locale, slug);
   if (!post) notFound();
 
-  const { posts } = await getPosts({ pageSize: 4 });
+  const t = ui(locale);
+  const { arrowForward } = config(locale);
+  const to = (path) => localePath(locale, path);
+  const { posts } = await getPosts(locale, { pageSize: 4 });
   const related = posts.filter((item) => item.slug !== post.slug).slice(0, 3);
-  const pageUrl = `${siteUrl}/blog/${post.slug}`;
-  const meta = [formatDate(post.publishedDate), post.author, post.readingTime ? `${post.readingTime} دقائق قراءة` : null]
+  const pageUrl = `${siteUrl}${to(`/blog/${post.slug}`)}`;
+  const meta = [formatDate(post.publishedDate, locale), post.author, post.readingTime ? t.readingTime(post.readingTime) : null]
     .filter(Boolean)
     .join(" · ");
+
+  // The language switch goes to this article's counterpart when one exists,
+  // and otherwise falls back to the other language's blog index rather than a
+  // URL that would 404.
+  const other = otherLocale(locale);
+  const otherSlug = translationSlug(post, other);
+  const switchHref = otherSlug ? localePath(other, `/blog/${otherSlug}`) : localePath(other, "/blog");
 
   const jsonLd = [
     {
@@ -78,7 +93,7 @@ export default async function BlogPostPage({ params }) {
       image: post.image?.url ? [post.image.url] : undefined,
       datePublished: post.publishedDate || undefined,
       dateModified: post.updatedAt || post.publishedDate || undefined,
-      inLanguage: "ar",
+      inLanguage: locale,
       mainEntityOfPage: { "@type": "WebPage", "@id": pageUrl },
       author: post.author ? { "@type": "Person", name: post.author } : { "@id": `${siteUrl}/#business` },
       publisher: { "@id": `${siteUrl}/#business` },
@@ -88,8 +103,8 @@ export default async function BlogPostPage({ params }) {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "الرئيسية", item: siteUrl },
-        { "@type": "ListItem", position: 2, name: "المدونة", item: `${siteUrl}/blog` },
+        { "@type": "ListItem", position: 1, name: t.home, item: `${siteUrl}${to("/")}` },
+        { "@type": "ListItem", position: 2, name: t.blog, item: `${siteUrl}${to("/blog")}` },
         { "@type": "ListItem", position: 3, name: post.title, item: pageUrl },
       ],
     },
@@ -99,12 +114,12 @@ export default async function BlogPostPage({ params }) {
   const html = marked.parse(post.content || "", { gfm: true, breaks: true });
 
   return (
-    <SiteShell whatsappUrl={whatsappLink("السلام عليكم، أرغب في الاستفسار عن خدمات حقول السلام.")}>
+    <SiteShell locale={locale} whatsappUrl={whatsappLink(ENQUIRY_WHATSAPP[locale])} switchHref={switchHref}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <section className="article-hero">
         <div className="container article-heading">
-          <Link className="article-back" href="/blog">← العودة إلى المدونة</Link>
+          <Link className="article-back" href={to("/blog")}>{config(locale).arrowBack} {t.backToBlog}</Link>
           {post.category ? <p className="eyebrow eyebrow-light">{post.category}</p> : null}
           <h1>{post.title}</h1>
           <p>{post.description}</p>
@@ -128,9 +143,9 @@ export default async function BlogPostPage({ params }) {
       <div className="container article-layout">
         <article className="article-content" dangerouslySetInnerHTML={{ __html: html }} />
         <aside className="article-aside">
-          <span>هل تحتاج مساعدة في مشروعك؟</span>
-          <p>أرسل تفاصيل طلبك في أقل من دقيقتين، ويصلك عرض سعر يناسب احتياجك.</p>
-          <Link href="/quote">اطلب عرض سعر <span aria-hidden="true">←</span></Link>
+          <span>{t.articleAsideTitle}</span>
+          <p>{t.articleAsideText}</p>
+          <Link href={to("/quote")}>{t.requestQuote} <span aria-hidden="true">{arrowForward}</span></Link>
         </aside>
       </div>
 
@@ -139,23 +154,23 @@ export default async function BlogPostPage({ params }) {
           <div className="container">
             <div className="section-heading compact">
               <div>
-                <p className="eyebrow">اقرأ أيضاً</p>
-                <h2>مقالات أخرى</h2>
+                <p className="eyebrow">{t.alsoRead}</p>
+                <h2>{t.otherArticles}</h2>
               </div>
-              <Link className="text-link" href="/blog">كل المقالات <span aria-hidden="true">←</span></Link>
+              <Link className="text-link" href={to("/blog")}>{t.allArticles} <span aria-hidden="true">{arrowForward}</span></Link>
             </div>
             <div className="blog-grid">
               {related.map((item) => (
                 <article className="blog-card" key={item.slug}>
-                  <Link className="blog-card-media" href={`/blog/${item.slug}`} aria-label={item.title}>
+                  <Link className="blog-card-media" href={to(`/blog/${item.slug}`)} aria-label={item.title}>
                     {item.image ? (
                       <Image src={item.image.url} alt={item.image.alt || item.title} fill sizes="(max-width: 900px) 50vw, 33vw" />
                     ) : null}
                   </Link>
                   <div className="blog-card-body">
-                    <p className="blog-card-meta">{formatDate(item.publishedDate)}</p>
-                    <h3><Link href={`/blog/${item.slug}`}>{item.title}</Link></h3>
-                    <Link className="blog-card-link" href={`/blog/${item.slug}`}>اقرأ المقال <span aria-hidden="true">←</span></Link>
+                    <p className="blog-card-meta">{formatDate(item.publishedDate, locale)}</p>
+                    <h3><Link href={to(`/blog/${item.slug}`)}>{item.title}</Link></h3>
+                    <Link className="blog-card-link" href={to(`/blog/${item.slug}`)}>{t.readArticle} <span aria-hidden="true">{arrowForward}</span></Link>
                   </div>
                 </article>
               ))}

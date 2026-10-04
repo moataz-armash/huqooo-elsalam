@@ -3,13 +3,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CircleCheck, MessageCircle, RotateCcw, ShieldCheck } from "lucide-react";
 import { whatsappLink } from "@/app/site";
-import { CONTACT_FIELDS, PROJECT_FIELDS, SERVICES, STEPS, buildMessage, isVisible, makeRequestId, option, stepErrors } from "./quoteOptions";
+import { config } from "@/app/i18n";
+import { ENQUIRY_WHATSAPP } from "@/app/content/ui";
+import { buildMessage, getQuoteSchema, isVisible, makeRequestId, option, stepErrors } from "./quoteOptions";
 
-const DRAFT_KEY = "hs-quote-draft-v1";
+// The draft is keyed per language on purpose. Answers are stored as the option
+// labels themselves, so an Arabic draft restored into the English form would
+// produce a half-translated request that fails validation against options it
+// no longer matches.
+const draftKey = (locale) => `hs-quote-draft-v1-${locale}`;
 const DRAFT_TTL = 7 * 24 * 60 * 60 * 1000;
-const DIRECT_MESSAGE = "السلام عليكم، أرغب في الاستفسار عن خدمات حقول السلام.";
 
-export default function QuoteForm() {
+export default function QuoteForm({ locale = "ar" }) {
+  const schema = useMemo(() => getQuoteSchema(locale), [locale]);
+  const { SERVICES, PROJECT_FIELDS, CONTACT_FIELDS, STEPS, form } = schema;
+  // In RTL "next" points left and "back" points right; in LTR it is the other
+  // way round. The icons follow reading direction, not a fixed side.
+  const rtl = config(locale).dir === "rtl";
+  const NextIcon = rtl ? ArrowLeft : ArrowRight;
+  const BackIcon = rtl ? ArrowRight : ArrowLeft;
+  const DRAFT_KEY = draftKey(locale);
+
   const [step, setStep] = useState(0);
   const [services, setServices] = useState([]);
   const [answers, setAnswers] = useState({});
@@ -51,16 +65,19 @@ export default function QuoteForm() {
     setServices(nextServices);
     setStep(nextStep);
     setReady(true);
-  }, []);
+  }, [DRAFT_KEY, SERVICES, STEPS.length]);
 
   useEffect(() => {
     if (!ready || sent) return;
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({ step, services, answers, requestId, savedAt: Date.now() }));
     } catch {}
-  }, [ready, sent, step, services, answers, requestId]);
+  }, [DRAFT_KEY, ready, sent, step, services, answers, requestId]);
 
-  const message = useMemo(() => buildMessage({ services, answers, requestId }), [services, answers, requestId]);
+  const message = useMemo(
+    () => buildMessage(schema, { services, answers, requestId }),
+    [schema, services, answers, requestId],
+  );
   const waUrl = whatsappLink(message);
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
@@ -85,7 +102,7 @@ export default function QuoteForm() {
   const goTo = (index) => { setErrors({}); setStep(index); focusStep(); };
 
   const next = () => {
-    const errs = stepErrors(current.id, services, answers);
+    const errs = stepErrors(schema, current.id, services, answers);
     if (Object.keys(errs).length) { setErrors(errs); focusFirstError(errs); return; }
     goTo(step + 1);
   };
@@ -108,7 +125,7 @@ export default function QuoteForm() {
   // preventDefault, which that listener respects.
   const onSend = (event) => {
     for (let i = 0; i < STEPS.length; i++) {
-      const errs = stepErrors(STEPS[i].id, services, answers);
+      const errs = stepErrors(schema, STEPS[i].id, services, answers);
       if (Object.keys(errs).length) {
         event.preventDefault();
         setErrors(errs);
@@ -133,7 +150,7 @@ export default function QuoteForm() {
     focusStep();
   };
 
-  const fieldProps = { answers, errors, onChange: setAnswer };
+  const fieldProps = { answers, errors, onChange: setAnswer, form };
 
   return (
     <div className="container quote-layout">
@@ -141,20 +158,20 @@ export default function QuoteForm() {
         {sent ? (
           <div className="quote-sent" role="status">
             <span className="quote-sent-icon"><CircleCheck aria-hidden="true" strokeWidth={1.6} /></span>
-            <h2 ref={headingRef} tabIndex={-1}>تم تجهيز طلبك</h2>
-            <p>أكمل الإرسال من واتساب بالضغط على زر الإرسال هناك، وسيراجع فريقنا طلبك ويرد عليك بعرض السعر.</p>
-            <p className="quote-sent-id">رقم طلبك <strong dir="ltr">{requestId}</strong></p>
+            <h2 ref={headingRef} tabIndex={-1}>{form.sentTitle}</h2>
+            <p>{form.sentText}</p>
+            <p className="quote-sent-id">{form.sentId} <strong dir="ltr">{requestId}</strong></p>
             <div className="quote-sent-actions">
               <a className="button button-outline" href={waUrl} target="_blank" rel="noopener noreferrer" data-no-conversion>
-                لم يُفتح واتساب؟ افتحه من هنا
+                {form.sentReopen}
               </a>
-              <button type="button" className="quote-back" onClick={reset}>إرسال طلب جديد</button>
+              <button type="button" className="quote-back" onClick={reset}>{form.sentAgain}</button>
             </div>
           </div>
         ) : (
           <>
             <div className="quote-card-head">
-              <ol className="quote-progress" aria-label="خطوات الطلب">
+              <ol className="quote-progress" aria-label={form.stepsAria}>
                 {STEPS.map((s, i) => {
                   const state = i < step ? "done" : i === step ? "current" : "todo";
                   const inner = (
@@ -166,16 +183,16 @@ export default function QuoteForm() {
                   return (
                     <li key={s.id} className={`qp-${state}`} aria-current={state === "current" ? "step" : undefined}>
                       {state === "done"
-                        ? <button type="button" onClick={() => goTo(i)} aria-label={`العودة إلى: ${s.title}`}>{inner}</button>
+                        ? <button type="button" onClick={() => goTo(i)} aria-label={form.backTo(s.title)}>{inner}</button>
                         : <span>{inner}</span>}
                     </li>
                   );
                 })}
               </ol>
               {hasProgress && (
-                <button type="button" className="quote-reset" aria-label="ابدأ من جديد" title="ابدأ من جديد"
-                  onClick={() => window.confirm("هل تريد مسح إجاباتك والبدء من جديد؟") && reset()}>
-                  <RotateCcw aria-hidden="true" /><span className="quote-reset-text">ابدأ من جديد</span>
+                <button type="button" className="quote-reset" aria-label={form.restart} title={form.restart}
+                  onClick={() => window.confirm(form.restartConfirm) && reset()}>
+                  <RotateCcw aria-hidden="true" /><span className="quote-reset-text">{form.restart}</span>
                 </button>
               )}
             </div>
@@ -184,7 +201,7 @@ export default function QuoteForm() {
             </div>
 
             <div className="quote-step" key={current.id}>
-              <p className="quote-step-count">الخطوة {step + 1} من {STEPS.length}</p>
+              <p className="quote-step-count">{form.stepCount(step + 1, STEPS.length)}</p>
               <h2 ref={headingRef} tabIndex={-1}>{current.title}</h2>
               <p className="quote-step-intro">{current.intro}</p>
 
@@ -192,7 +209,7 @@ export default function QuoteForm() {
                 <>
                   <fieldset className="service-choices" data-field="services"
                     aria-describedby={errors.services ? "services-err" : undefined}>
-                    <legend className="screen-reader-text">الخدمات المطلوبة</legend>
+                    <legend className="screen-reader-text">{form.servicesLegend}</legend>
                     {SERVICES.map(({ id, title, desc, Icon }) => (
                       <label className="service-choice" key={id}>
                         <input className="choice-input" type="checkbox" checked={services.includes(id)}
@@ -224,11 +241,11 @@ export default function QuoteForm() {
                 <>
                   <Fields fields={CONTACT_FIELDS} scope="contact" {...fieldProps} />
                   <p className="quote-phone-note">
-                    <ShieldCheck aria-hidden="true" />يصلنا رقمك تلقائياً مع رسالة واتساب، فلا حاجة لكتابته.
+                    <ShieldCheck aria-hidden="true" />{form.phoneNote}
                   </p>
                   <details className="quote-preview-inline">
-                    <summary>معاينة الرسالة قبل الإرسال</summary>
-                    <WhatsAppPreview message={message} />
+                    <summary>{form.previewToggle}</summary>
+                    <WhatsAppPreview message={message} form={form} />
                   </details>
                 </>
               )}
@@ -236,15 +253,15 @@ export default function QuoteForm() {
 
             <div className="quote-nav">
               {step > 0
-                ? <button type="button" className="quote-back" aria-label="السابق" onClick={() => goTo(step - 1)}><ArrowRight aria-hidden="true" /><span className="quote-back-text">السابق</span></button>
+                ? <button type="button" className="quote-back" aria-label={form.previous} onClick={() => goTo(step - 1)}><BackIcon aria-hidden="true" /><span className="quote-back-text">{form.previous}</span></button>
                 : <span />}
               {isLast ? (
                 <a className="button button-gold quote-next" href={waUrl} target="_blank" rel="noopener noreferrer" onClick={onSend}>
-                  <MessageCircle aria-hidden="true" />أرسل الطلب عبر واتساب
+                  <MessageCircle aria-hidden="true" />{form.send}
                 </a>
               ) : (
                 <button type="button" className="button button-gold quote-next" onClick={next}>
-                  التالي<ArrowLeft aria-hidden="true" />
+                  {form.next}<NextIcon aria-hidden="true" />
                 </button>
               )}
             </div>
@@ -252,42 +269,40 @@ export default function QuoteForm() {
         )}
       </div>
 
-      <aside className="quote-aside" aria-label="معاينة الطلب">
-        <WhatsAppPreview message={message} />
+      <aside className="quote-aside" aria-label={form.previewAria}>
+        <WhatsAppPreview message={message} form={form} />
         <ul className="quote-assurances">
-          <li><Check aria-hidden="true" />عرض سعر مجاني وبدون أي التزام</li>
-          <li><Check aria-hidden="true" />تراجع الرسالة في واتساب قبل إرسالها</li>
-          <li><Check aria-hidden="true" />يصلنا رقمك تلقائياً مع الرسالة</li>
+          {form.assurances.map((item) => <li key={item}><Check aria-hidden="true" />{item}</li>)}
         </ul>
-        <a className="quote-direct" href={whatsappLink(DIRECT_MESSAGE)} target="_blank" rel="noopener noreferrer">
-          تفضّل الحديث مباشرة؟ <strong>راسلنا على واتساب</strong>
+        <a className="quote-direct" href={whatsappLink(ENQUIRY_WHATSAPP[locale] || ENQUIRY_WHATSAPP.ar)} target="_blank" rel="noopener noreferrer">
+          {form.directPrompt} <strong>{form.directCta}</strong>
         </a>
       </aside>
     </div>
   );
 }
 
-function Fields({ fields, scope, answers, errors, onChange }) {
+function Fields({ fields, scope, answers, errors, onChange, form }) {
   return fields.filter((field) => isVisible(field, answers)).map((field) => {
     const name = `${scope}.${field.id}`;
-    const props = { name, field, value: answers[name], error: errors[name], onChange: (v) => onChange(name, v) };
+    const props = { name, field, form, value: answers[name], error: errors[name], onChange: (v) => onChange(name, v) };
     if (field.type === "single" || field.type === "multi") return <ChoiceField key={name} {...props} />;
     if (field.type === "checkbox") return <CheckField key={name} {...props} />;
     return <TextField key={name} {...props} />;
   });
 }
 
-function Optional({ field }) {
-  return field.required ? null : <span className="q-optional">اختياري</span>;
+function Optional({ field, form }) {
+  return field.required ? null : <span className="q-optional">{form.optional}</span>;
 }
 
-function ChoiceField({ name, field, value, error, onChange }) {
+function ChoiceField({ name, field, form, value, error, onChange }) {
   const multi = field.type === "multi";
   const selected = multi ? value || [] : value || "";
   const errId = `${name}-err`;
   return (
     <fieldset className="q-field" data-field={name} aria-describedby={error ? errId : undefined}>
-      <legend className="q-label">{field.label}<Optional field={field} /></legend>
+      <legend className="q-label">{field.label}<Optional field={field} form={form} /></legend>
       {field.hint && <p className="q-hint">{field.hint}</p>}
       <div className="chips">
         {field.options.map(option).map(({ label }) => {
@@ -310,14 +325,14 @@ function ChoiceField({ name, field, value, error, onChange }) {
   );
 }
 
-function TextField({ name, field, value, error, onChange }) {
+function TextField({ name, field, form, value, error, onChange }) {
   const id = `q-${name.replace(".", "-")}`;
   const errId = `${id}-err`;
   const area = field.type === "textarea";
   const Tag = area ? "textarea" : "input";
   return (
     <div className="q-field" data-field={name}>
-      <label className="q-label" htmlFor={id}>{field.label}<Optional field={field} /></label>
+      <label className="q-label" htmlFor={id}>{field.label}<Optional field={field} form={form} /></label>
       <Tag id={id} className="q-input" value={value || ""} maxLength={field.maxLength} placeholder={field.placeholder}
         autoComplete={field.autoComplete || "off"} rows={area ? 4 : undefined} type={area ? undefined : "text"}
         aria-invalid={error ? true : undefined} aria-describedby={error ? errId : undefined}
@@ -338,12 +353,12 @@ function CheckField({ name, field, value, onChange }) {
   );
 }
 
-function WhatsAppPreview({ message }) {
+function WhatsAppPreview({ message, form }) {
   return (
     <div className="wa-preview">
       <div className="wa-head">
         <span className="wa-avatar"><MessageCircle aria-hidden="true" /></span>
-        <span><strong>معاينة رسالتك</strong><small>هذا ما يصلنا عبر واتساب</small></span>
+        <span><strong>{form.previewTitle}</strong><small>{form.previewSub}</small></span>
       </div>
       <div className="wa-chat">
         <p className="wa-bubble">{renderWhatsApp(message)}</p>
