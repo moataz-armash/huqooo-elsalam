@@ -10,7 +10,9 @@ import { config, localePath, otherLocale } from "@/app/i18n";
 import { ui } from "@/app/content/ui";
 
 // Section anchors point at the home page so they also work from /quote.
-// #contact is the footer, which every page has, so it stays page-local.
+// The footer keeps id="contact" so any existing /#contact link still lands
+// there, but nothing in the nav points at it any more: it scrolled to the
+// footer, which the quote button above it already covers.
 // Each nav href is stored without a language prefix and localised here, so the
 // English menu links to /en/services rather than back into the Arabic site.
 const navHref = (locale, href) => {
@@ -133,7 +135,7 @@ export default function SiteShell({ children, whatsappUrl, locale = "ar", switch
         </div>
         <div>
           <h3>{t.quickLinks}</h3>
-          {t.nav.slice(0, 5).map(([href, label]) => <NavLink href={navHref(locale, href)} key={href}>{label}</NavLink>)}
+          {t.nav.map(([href, label]) => <NavLink href={navHref(locale, href)} key={href}>{label}</NavLink>)}
           <Link href={quoteHref}>{t.quoteLink}</Link>
         </div>
         <div>
